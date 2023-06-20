@@ -1,5 +1,4 @@
-import 'dart:io';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart' as wv;
 
@@ -34,12 +33,14 @@ class EasyWebViewControllerWrapper extends EasyWebViewControllerWrapperBase {
 
   @override
   Future<void> evaluateJSMobile(String js) {
-    return _controller.runJavascript(js);
+    return _controller.runJavaScript(js);
   }
 
   @override
-  Future<String> evaluateJSWithResMobile(String js) {
-    return _controller.runJavascriptReturningResult(js);
+  Future<String> evaluateJSWithResMobile(String js) async {
+    final res = await _controller.runJavaScriptReturningResult(js);
+
+    return res.toString();
   }
 
   @override
@@ -55,10 +56,31 @@ class NativeWebViewState extends WebViewState<NativeWebView> {
 
   @override
   void initState() {
-    super.initState();
+    final _controller = wv.WebViewController();
+    _controller.setJavaScriptMode(wv.JavascriptMode.unrestricted);
+    _controller.setNavigationDelegate(
+        wv.NavigationDelegate(onNavigationRequest: (navigationRequest) async {
+      if (widget.options.navigationDelegate == null) {
+        return wv.NavigationDecision.navigate;
+      }
+      final _navDecision = await widget.options
+          .navigationDelegate!(WebNavigationRequest(navigationRequest.url));
+      return _navDecision == WebNavigationDecision.prevent
+          ? wv.NavigationDecision.prevent
+          : wv.NavigationDecision.navigate;
+    }));
+    if (widget.options.crossWindowEvents.isNotEmpty) {
+      updateJSChannels(_controller, widget.options.crossWindowEvents, null);
+    }
+    _controller.loadRequest(Uri.parse(url));
 
-    // Enable hybrid composition.
-    if (Platform.isAndroid) wv.WebView.platform = wv.SurfaceAndroidWebView();
+    controller = _controller;
+
+    WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
+      widget.onLoaded?.call(EasyWebViewControllerWrapper._(controller));
+    });
+
+    super.initState();
   }
 
   @override
@@ -67,44 +89,44 @@ class NativeWebViewState extends WebViewState<NativeWebView> {
     if (oldWidget.src != widget.src) {
       reload();
     }
+    if (!listEquals(
+      oldWidget.options.crossWindowEvents,
+      widget.options.crossWindowEvents,
+    )) {
+      updateJSChannels(
+        controller,
+        widget.options.crossWindowEvents,
+        oldWidget.options.crossWindowEvents,
+      );
+    }
+  }
+
+  updateJSChannels(
+    wv.WebViewController controller,
+    List<CrossWindowEvent> crossWindowEvents,
+    List<CrossWindowEvent>? oldCrossWindowEvents,
+  ) {
+    oldCrossWindowEvents?.forEach((element) {
+      controller.removeJavaScriptChannel(element.name);
+    });
+
+    crossWindowEvents.forEach((element) {
+      controller.addJavaScriptChannel(element.name,
+          onMessageReceived: (javascriptMessage) {
+        element.eventAction(javascriptMessage.message);
+      });
+    });
   }
 
   reload() {
-    controller.loadUrl(url);
+    controller.loadRequest(Uri.parse(url));
   }
 
   @override
   Widget builder(BuildContext context, Size size, String contents) {
-    return wv.WebView(
+    return wv.WebViewWidget(
       key: widget.key,
-      initialUrl: url,
-      javascriptMode: wv.JavascriptMode.unrestricted,
-      onWebViewCreated: (value) {
-        controller = value;
-        if (widget.onLoaded != null) {
-          widget.onLoaded!(EasyWebViewControllerWrapper._(value));
-        }
-      },
-      navigationDelegate: (navigationRequest) async {
-        if (widget.options.navigationDelegate == null) {
-          return wv.NavigationDecision.navigate;
-        }
-        final _navDecision = await widget.options
-            .navigationDelegate!(WebNavigationRequest(navigationRequest.url));
-        return _navDecision == WebNavigationDecision.prevent
-            ? wv.NavigationDecision.prevent
-            : wv.NavigationDecision.navigate;
-      },
-      javascriptChannels: widget.options.crossWindowEvents.isNotEmpty
-          ? widget.options.crossWindowEvents
-              .map((event) => wv.JavascriptChannel(
-                    name: event.name,
-                    onMessageReceived: (javascriptMessage) {
-                      event.eventAction(javascriptMessage.message);
-                    },
-                  ))
-              .toSet()
-          : Set<wv.JavascriptChannel>(),
+      controller: controller,
     );
   }
 }
