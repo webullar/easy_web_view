@@ -12,6 +12,7 @@ dependencies:
     sdk: flutter
   flutter_markdown: ^0.6.15
   flutter_widget_from_html: ^0.13.0-alpha.1
+  fwfh_chewie: ^0.13.0-0
   html2md: ^1.2.5
   http: ^0.13.3
   markdown: ^7.1.0
