@@ -57,7 +57,7 @@ class NativeWebViewState extends WebViewState<NativeWebView> {
   @override
   void initState() {
     final _controller = wv.WebViewController();
-    _controller.setJavaScriptMode(wv.JavascriptMode.unrestricted);
+    _controller.setJavaScriptMode(wv.JavaScriptMode.unrestricted);
     _controller.setNavigationDelegate(
         wv.NavigationDelegate(onNavigationRequest: (navigationRequest) async {
       if (widget.options.navigationDelegate == null) {
